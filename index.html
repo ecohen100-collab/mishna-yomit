@@ -4,9 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>משנה יומית — שישה סדרי משנה</title>
+<meta name="description" content="שיעור יומי קצר על שלוש משניות, לאורך כל ששת סדרי המשנה. לע"נ שרה בת חיה.">
+<meta name="theme-color" content="#8a5a2b">
+<meta property="og:type" content="website">
+<meta property="og:title" content="משנה יומית">
+<meta property="og:description" content="שיעור יומי קצר על שלוש משניות, לאורך כל ששת סדרי המשנה.">
+<meta property="og:site_name" content="משנה יומית">
+<meta property="og:locale" content="he_IL">
 <style>
   :root{
-    --bg:#f6f3ec; --card:#fffdf8; --ink:#2b2118; --muted:#8a7a66;
+    --bg:#f6f3ec; --card:#fffdf8; --ink:#2b2118; --muted:#71614d;
     --line:#e2d8c8; --accent:#8a5a2b; --accent-soft:#f0e4d3; --shadow:0 1px 3px rgba(80,60,30,.10);
   }
   @media (prefers-color-scheme: dark){
@@ -89,6 +96,19 @@
   .chip .tick{color:var(--accent);font-size:.72rem}
   .empty{padding:26px;text-align:center;color:var(--muted);
         border:1px dashed var(--line);border-radius:12px}
+  .catchup{background:var(--accent-soft);border:1px solid var(--accent);
+        border-radius:10px;padding:12px 15px;margin-bottom:14px;font-size:.92rem}
+  .catchup button{margin-inline-start:10px;background:var(--accent);color:#fff;
+        border:0;border-radius:8px;padding:7px 14px;font-size:.88rem;cursor:pointer;
+        font-family:inherit}
+  .doneday{color:var(--accent);font-weight:600;font-size:.92rem;margin-bottom:12px}
+  @media (max-width:520px){
+    header{padding:16px 0 10px}
+    header h1{font-size:1.55rem}
+    header p{display:none}
+    .dedication{margin:2px 0 14px;font-size:.95rem}
+    .wrap{padding:12px 14px 50px}
+  }
   .audio{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card)}
   .audio iframe{display:block;width:100%;height:78px;border:0}
   .srcnote{font-size:.78rem;color:var(--muted);margin-top:7px}
@@ -348,7 +368,8 @@ function route(){
   const sed = i => SEDARIM[num(i)];
   const mas = (i, j) => (sed(i) || {m:[]}).m[num(j)];
   try {
-    if (!parts.length) return viewSedarim();
+    if (!parts.length) return viewToday();
+    if (parts[0] === "all") return viewSedarim();
     if (parts[0] === "today") return viewToday();
     if (parts[0] === "d" && Number.isInteger(num(1))) return viewDay(num(1));
     if (parts[0] === "s" && sed(1)) return viewSeder(num(1));
@@ -360,6 +381,20 @@ function route(){
   } catch (e) {}
   viewSedarim();
 }
+
+/* היום האחרון שסומן כנלמד במלואו, לצורך חיווי פספוס */
+function lastLearnedDay(todayIdx){
+  const done = memRead().done || {};
+  const key = r => r[0] + "." + r[1] + "." + r[2];
+  for (let k = todayIdx - 1; k >= Math.max(0, todayIdx - 120); k--){
+    if (DAYS[k].every(r => done[key(r)])) return k;
+  }
+  return -1;
+}
+const dayIsDone = idx => {
+  const done = memRead().done || {};
+  return DAYS[idx].every(r => done[r[0] + "." + r[1] + "." + r[2]]);
+};
 
 /* ================= מסך "לימוד היום" ================= */
 let dayCursor = null;
@@ -393,9 +428,14 @@ function renderDay(idx, hash){
       '<button id="next"' + (dayCursor >= DAYS.length - 1 ? " disabled" : "") + '>הבא &lsaquo;</button>' +
     "</div>" +
     (resting ? '<div class="note">' + restName + '. היום לא לומדים - להלן השיעור הבא.</div>' : "") +
+    (isToday && dayIsDone(dayCursor) ? '<div class="doneday">✓ סיימת את השיעור של היום</div>' : "") +
+    catchupHTML(isToday, dayCursor) +
     (refs.length > 1 ? '<div class="note">היום הזה חוצה מסכת: שלוש המשניות מתחלקות בין שתי מסכתות, ולכן שני סרטונים.</div>' : "") +
     refs.map(r => playerBlock(r[0], r[1], r[2])).join("") +
-    (isToday ? "" : '<div class="acts"><button class="act" id="back2today">חזרה ללימוד היום</button></div>') +
+    '<div class="acts">' +
+      (isToday ? "" : '<button class="act" id="back2today">חזרה ללימוד היום</button>') +
+      '<button class="act" id="allsedarim">כל הסדרים</button>' +
+    "</div>" +
   "</div>";
 
   const prev = document.getElementById("prev"), next = document.getElementById("next");
@@ -403,7 +443,21 @@ function renderDay(idx, hash){
   if (next) next.onclick = () => viewDay(dayCursor + 1);
   const b2t = document.getElementById("back2today");
   if (b2t) b2t.onclick = () => viewDay(today);
+  const cu = document.getElementById("catchup");
+  if (cu) cu.onclick = () => viewDay(+cu.dataset.i);
+  const als = document.getElementById("allsedarim");
+  if (als) als.onclick = viewSedarim;
   wirePlayers();
+}
+
+function catchupHTML(isToday, idx){
+  if (!isToday) return "";
+  const last = lastLearnedDay(idx);
+  if (last < 0 || idx - last <= 1) return "";
+  const n = idx - last - 1;
+  return '<div class="catchup">פספסת ' + n + ' ' + (n === 1 ? 'שיעור' : 'שיעורים') +
+         '. אפשר להשלים מהמקום שעצרת.' +
+         '<button id="catchup" data-i="' + (last + 1) + '">להשלמה</button></div>';
 }
 
 const viewToday = () => renderDay(dayIndexFor(learningDate()), "#/today");
@@ -457,7 +511,7 @@ function wireHero(){
 }
 
 function viewSedarim(){
-  setHash("#/");
+  setHash("#/all");
   setCrumbs([{t:"שישה סדרים"}]);
   app.innerHTML = heroHTML() + `<div class="grid">${SEDARIM.map((s,i)=>{
     const done = s.m.filter(m=>m.p).length;
