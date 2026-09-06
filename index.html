@@ -119,6 +119,10 @@
   .preview{margin-top:20px;padding:13px 15px;border-radius:10px;
         background:var(--accent-soft);color:var(--accent);font-size:.93rem}
   .preview span{color:var(--accent);opacity:.85;font-size:.86rem}
+  .mylink{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+  .mylink code{flex:1 1 220px;background:var(--accent-soft);color:var(--accent);
+        padding:10px 12px;border-radius:9px;font-size:.82rem;direction:ltr;
+        text-align:left;word-break:break-all;line-height:1.5}
   @media (max-width:520px){
     header{padding:16px 0 10px}
     header h1{font-size:1.55rem}
@@ -411,6 +415,11 @@ function route(){
     if (!parts.length) return viewToday();
     if (parts[0] === "all") return viewSedarim();
     if (parts[0] === "settings") return viewSettings();
+    if (parts[0] === "my" && Number.isInteger(num(1))){
+      /* קישור אישי: קובע הקדמה/איחור פעם אחת במכשיר הזה, ופותח את השיעור */
+      setPrefs({offset: Math.max(-OFFSET_MAX, Math.min(OFFSET_MAX, num(1)))});
+      return viewToday();
+    }
     if (parts[0] === "today") return viewToday();
     if (parts[0] === "d" && Number.isInteger(num(1))) return viewDay(num(1));
     if (parts[0] === "s" && sed(1)) return viewSeder(num(1));
@@ -547,13 +556,22 @@ function viewSettings(){
       'מספר חיובי מקדים, שלילי מאחר, אפס הוא הלוח הרשמי.</p></div>' +
 
     '<div class="preview" id="pv"></div>' +
+
+    '<div class="setrow"><label>הקישור האישי שלך</label>' +
+      '<div class="mylink"><code id="mylink"></code>' +
+      '<button class="act" id="copylink">העתקה</button></div>' +
+      '<p>הקישור הזה כבר מכיל את ההקדמה שבחרתם. פתיחה שלו בכל מכשיר תגדיר ' +
+      'אותו שם פעם אחת, וכל כניסה רגילה אחר כך תפתח את השיעור הנכון. ' +
+      'אפשר לשמור אותו כסימנייה או להוסיף למסך הבית בטלפון.</p></div>' +
     '<div class="acts">' +
       '<button class="act" id="reset">איפוס לברירת מחדל</button>' +
       '<button class="act on" id="tolesson">לשיעור</button>' +
     '</div></div>';
 
   const rv = document.getElementById("rv"), off = document.getElementById("off");
+  const myUrl = () => location.origin + location.pathname + "#/my/" + prefs().offset;
   const draw = () => {
+    document.getElementById("mylink").textContent = myUrl();
     const i = currentDayIndex();
     const refs = DAYS[i].map(r => SEDARIM[r[0]].m[r[1]].n + " " + r[2]).join(" + ");
     const d = dateOfDay(i);
@@ -574,6 +592,14 @@ function viewSettings(){
     setPrefs({rollover: ROLLOVER_DEFAULT, offset: 0});
     rv.value = ROLLOVER_DEFAULT; off.value = 0; draw(); };
   document.getElementById("tolesson").onclick = viewToday;
+  document.getElementById("copylink").onclick = async (e) => {
+    try {
+      if (navigator.share) { await navigator.share({title: "משנה יומית", url: myUrl()}); return; }
+      await navigator.clipboard.writeText(myUrl());
+      e.target.textContent = "✓ הועתק";
+      setTimeout(() => { e.target.textContent = "העתקה"; }, 2200);
+    } catch (err) {}
+  };
   draw();
 }
 
