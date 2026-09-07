@@ -243,10 +243,16 @@ function learnSpan(a, b){
 }
 
 /* התאריך שאליו מתייחס "היום", אחרי שהיום הלימודי מתחלף בערב */
+/* שעת ההחלפה יכולה להיות בערב או בבוקר, וזה שני דברים שונים:
+   19:00 = היום הלימודי מתחיל בערב, כמו במוצאי שבת, ולכן שייך למחרת.
+   05:00 = היום הלימודי מתחיל בבוקר, ולכן לפני 05:00 עדיין אתמול.
+   שתיהן נופלות מאותה נוסחה: מזיזים אחורה את שעת הסף,
+   ומוסיפים יום רק כשהסף הוא ערב. */
 function learningDate(){
-  const now = new Date();
-  const d = midnight(now);
-  if (now.getHours() >= prefs().rollover) d.setDate(d.getDate() + 1);
+  const h = prefs().rollover;
+  const t = new Date(Date.now() - h * 3600000);
+  const d = midnight(t);
+  if (h >= 12) d.setDate(d.getDate() + 1);
   return d;
 }
 
@@ -416,8 +422,12 @@ function route(){
     if (parts[0] === "all") return viewSedarim();
     if (parts[0] === "settings") return viewSettings();
     if (parts[0] === "my" && Number.isInteger(num(1))){
-      /* קישור אישי: קובע הקדמה/איחור פעם אחת במכשיר הזה, ופותח את השיעור */
-      setPrefs({offset: Math.max(-OFFSET_MAX, Math.min(OFFSET_MAX, num(1)))});
+      /* קישור אישי: #/my/<הקדמה> או #/my/<הקדמה>/<שעה>.
+         קובע את ההעדפות פעם אחת במכשיר הזה, ופותח את השיעור. */
+      const patch = {offset: Math.max(-OFFSET_MAX, Math.min(OFFSET_MAX, num(1)))};
+      const h = num(2);
+      if (Number.isInteger(h) && h >= 0 && h <= 23) patch.rollover = h;
+      setPrefs(patch);
       return viewToday();
     }
     if (parts[0] === "today") return viewToday();
@@ -464,8 +474,7 @@ function renderDay(idx, hash){
   const isToday = dayCursor === today;
   const now = new Date();
   const today0 = midnight(now);
-  const resting = isToday && !prefs().offset &&
-        now.getHours() < prefs().rollover && !isLearnDay(today0);
+  const resting = isToday && !prefs().offset && !isLearnDay(today0);
   const restName = today0.getDay() === 6 ? "שבת שלום" : "חג שמח";
   const dstr = "יום " + DAYNAMES[date.getDay()] + ", " +
                date.getDate() + "." + (date.getMonth() + 1) + "." + date.getFullYear();
@@ -541,9 +550,11 @@ function viewSettings(){
 
     '<div class="setrow"><label for="rv">שעת החלפת היום</label>' +
       '<select id="rv">' + hours.join("") + '</select>' +
-      '<p>מאיזו שעה בערב האתר כבר מציג את השיעור של מחר. ' +
-      'ברירת המחדל 19:00, כדי שבמוצאי שבת יופיע שיעור יום ראשון. ' +
-      'בחורף אפשר להקדים.</p></div>' +
+      '<p>השעה שבה מתחיל היום הלימודי החדש. ' +
+      '<strong>שעת ערב</strong> (12:00 ומעלה) מתנהגת כמו מוצאי שבת: מאותה שעה ' +
+      'כבר מוצג שיעור המחרת. ברירת המחדל 19:00. ' +
+      '<strong>שעת בוקר</strong> (לפני 12:00) מתנהגת הפוך: עד אותה שעה עדיין ' +
+      'מוצג שיעור אתמול. למשל 05:00, למי שלומד עם קימת הבוקר.</p></div>' +
 
     '<div class="setrow"><label>הקדמה או איחור</label>' +
       '<div class="stepper">' +
@@ -569,7 +580,8 @@ function viewSettings(){
     '</div></div>';
 
   const rv = document.getElementById("rv"), off = document.getElementById("off");
-  const myUrl = () => location.origin + location.pathname + "#/my/" + prefs().offset;
+  const myUrl = () => location.origin + location.pathname +
+        "#/my/" + prefs().offset + "/" + prefs().rollover;
   const draw = () => {
     document.getElementById("mylink").textContent = myUrl();
     const i = currentDayIndex();
