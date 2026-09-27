@@ -156,6 +156,12 @@
   .mtext .mb{font-family:"David","Frank Ruehl CLM","Times New Roman",serif;
         font-size:calc(1.18rem * var(--mfs,1));line-height:1.85}
   .mtext.closed .body{display:none}
+  .mtext .tbar button.on{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+  .mtext .bart{margin:6px 0 4px;padding:4px 12px;border-inline-start:3px solid var(--accent-soft);
+        color:var(--muted);font-family:"David","Frank Ruehl CLM","Times New Roman",serif;
+        font-size:calc(1rem * var(--mfs,1));line-height:1.7}
+  .mtext .bart p{margin:5px 0}
+  .mtext .bart b{color:var(--ink)}
   .prog{height:8px;border-radius:9px;background:var(--accent-soft);overflow:hidden;margin:8px 0 4px}
   .prog i{display:block;height:100%;background:var(--accent)}
   .search{display:flex;gap:8px;margin:0 0 12px}
@@ -469,6 +475,9 @@ async function chapterText(slug, c){
 }
 const stripNik = s => s.replace(/[֑-ֽֿ-ׇ]/g, "");
 const cleanTxt = s => String(s).replace(/<[^>]+>/g, "");
+/* ברטנורא: שומרים רק את ההדגשה של הדיבור המתחיל */
+const cleanBart = s => String(s).replace(/<(?!\/?b>)[^>]+>/g, "");
+const bartSlug = slug => "Bartenura_on_" + slug;
 
 function textBlock(si, mi, L){
   const m = SEDARIM[si].m[mi];
@@ -477,6 +486,7 @@ function textBlock(si, mi, L){
   return '<div class="mtext' + (pr.textOpen === false ? ' closed' : '') + '" data-k="' + si + '.' + mi + '.' + L + '">' +
     '<div class="tbar"><b>📜 טקסט המשניות</b>' +
     '<button data-t="nik">' + (pr.nikud === false ? 'עם ניקוד' : 'בלי ניקוד') + '</button>' +
+    '<button data-t="bart"' + (pr.bart ? ' class="on"' : '') + '>ברטנורא</button>' +
     '<button data-t="big">א+</button><button data-t="small">א-</button>' +
     '<button data-t="tog">' + (pr.textOpen === false ? 'הצג' : 'הסתר') + '</button></div>' +
     '<div class="body">טוען…</div></div>';
@@ -486,14 +496,22 @@ async function fillText(box){
   const [si, mi, L] = box.dataset.k.split(".").map(Number);
   const m = SEDARIM[si].m[mi], slug = slugOf(m.n);
   const r = lessonRange(m, L), body = box.querySelector(".body");
-  const nik = (memRead().prefs || {}).nikud !== false;
+  const pr = memRead().prefs || {}, nik = pr.nikud !== false, bart = !!pr.bart;
+  const nk = t => nik ? t : stripNik(t);
   try {
     let html = "";
     for (let j = r[0]; j <= r[1]; j++){
       const [c, n] = locate(m, j);
       const t = (await chapterText(slug, c))[n - 1];
       html += '<div class="mh">פרק ' + heb(c) + ' משנה ' + heb(n) + '</div>' +
-        '<div class="mb">' + (t ? (nik ? cleanTxt(t) : stripNik(cleanTxt(t))) : '<i>לא נמצא בספריא</i>') + '</div>';
+        '<div class="mb">' + (t ? nk(cleanTxt(t)) : '<i>לא נמצא בספריא</i>') + '</div>';
+      if (bart){
+        let b = [];
+        try { b = (await chapterText(bartSlug(slug), c))[n - 1] || []; } catch (e) {}
+        if (!Array.isArray(b)) b = [b];
+        html += '<div class="bart">' + (b.length ? b.map(x => '<p>' + nk(cleanBart(x)) + '</p>').join('')
+                 : '<p><i>אין ברטנורא למשנה זו בספריא</i></p>') + '</div>';
+      }
     }
     const [c0, n0] = locate(m, r[0]);
     html += '<div class="srcnote">הטקסט מתוך <a href="https://www.sefaria.org/' + slug + '.' + c0 + '.' + n0 +
@@ -515,6 +533,9 @@ function wireText(box){
     if (t === "nik"){ setPrefs({nikud: pr.nikud === false});
       app.querySelectorAll(".mtext").forEach(x => { x.querySelector('[data-t="nik"]').textContent =
         pr.nikud === false ? "בלי ניקוד" : "עם ניקוד"; fillText(x); }); }
+    if (t === "bart"){ setPrefs({bart: !pr.bart});
+      app.querySelectorAll(".mtext").forEach(x => { x.querySelector('[data-t="bart"]').classList.toggle("on", !pr.bart);
+        fillText(x); }); }
     if (t === "big" || t === "small"){
       const fs = Math.max(0.8, Math.min(2, (pr.fs || 1) + (t === "big" ? 0.1 : -0.1)));
       setPrefs({fs: Math.round(fs * 10) / 10}); applyFont(); }
